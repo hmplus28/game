@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import GameMove, GameRoom, RoomPlayer
+from .models import GameMove, GameRoom, MatchQueueEntry, RoomPlayer
 
 
 @admin.register(GameRoom)
@@ -22,3 +22,9 @@ class RoomPlayerAdmin(admin.ModelAdmin):
     list_display = ("nickname", "room", "color", "is_connected", "joined_at")
     list_filter = ("color", "is_connected")
     search_fields = ("nickname", "room__code")
+
+
+@admin.register(MatchQueueEntry)
+class MatchQueueEntryAdmin(admin.ModelAdmin):
+    list_display = ("nickname", "player_id", "created_at")
+    search_fields = ("nickname", "player_id")

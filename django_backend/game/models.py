@@ -17,7 +17,7 @@ class GameRoom(models.Model):
     active_color = models.CharField(max_length=12, default="red")
     turn_number = models.PositiveIntegerField(default=1)
     state = models.JSONField(default=dict, blank=True)
-    max_players = models.PositiveSmallIntegerField(default=2, validators=[MinValueValidator(2), MaxValueValidator(4)])
+    max_players = models.PositiveSmallIntegerField(default=2, validators=[MinValueValidator(2), MaxValueValidator(2)])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -38,6 +38,19 @@ class RoomPlayer(models.Model):
 
     def __str__(self) -> str:
         return f"{self.nickname} @ {self.room.code}"
+
+
+class MatchQueueEntry(models.Model):
+    """A durable waiting slot for the random two-player matchmaking queue."""
+    player_id = models.CharField(max_length=48, unique=True)
+    nickname = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.nickname} (waiting)"
 
 
 class GameMove(models.Model):
