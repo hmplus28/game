@@ -9,11 +9,10 @@ class GameRoom(models.Model):
         FINISHED = "finished", "Finished"
 
     class GameType(models.TextChoices):
-        LUDO = "ludo", "Classic Ludo"
         SNAKES = "snakes", "Snakes and Ladders"
 
     code = models.CharField(max_length=24, unique=True)
-    game_type = models.CharField(max_length=12, choices=GameType.choices, default=GameType.LUDO)
+    game_type = models.CharField(max_length=12, choices=GameType.choices, default=GameType.SNAKES)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.WAITING)
     active_color = models.CharField(max_length=12, default="red")
     turn_number = models.PositiveIntegerField(default=1)

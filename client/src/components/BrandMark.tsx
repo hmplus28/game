@@ -5,7 +5,7 @@
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className="brand-lockup" aria-label="Ludo Arena">
-      <img className="brand-mark" src="/manus-storage/ludo-arena-logo_577ea7f6.png" alt="نشان Ludo Arena" />
+      <span className="brand-mark arena-diamond" aria-hidden="true"><i /><i /><i /><i /></span>
       {!compact && (
         <span className="brand-wordmark" dir="ltr">
           Ludo <strong>Arena</strong>

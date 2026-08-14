@@ -1,151 +1,114 @@
 /**
- * Classic Games mobile reminder: simple rules, large targets, and one clear
- * action per turn make the experience approachable for first-time players.
+ * Snake & Ladders mobile reminder: clear state, tactile turn controls, and a
+ * richly illustrated board make a familiar game immediately approachable.
  */
-import { Bot, ChevronLeft, CircleHelp, Crown, Dices, Gamepad2, RotateCcw, Trophy, UsersRound, Wifi } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bot, ChevronLeft, Crown, Dices, RotateCcw, Trophy, UsersRound, Volume2, VolumeX, Wifi } from "lucide-react";
+import { CSSProperties, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/BrandMark";
+import { playGameSound } from "@/lib/gameSounds";
 
-type GameKind = "ludo" | "snakes";
-type PlayMode = "lobby" | "practice" | "online" | "online-play";
-type Turn = "you" | "bot";
-type OnlineRoomState = { status: string; players: { id: string; nickname: string; color: string; connected: boolean }[]; state: { active_player?: string; positions?: Record<string, number>; last_dice?: number } };
+type Mode = "lobby" | "practice" | "online" | "online-play";
+type Player = "you" | "bot";
+type Positions = Record<Player, number>;
+type OnlineState = { status: string; players: { id: string; nickname: string; connected: boolean }[]; state: { active_player?: string; positions?: Record<string, number>; last_dice?: number } };
 
-const snakes = { 17: 7, 54: 34, 62: 19, 98: 79 } as Record<number, number>;
-const ladders = { 4: 14, 9: 31, 20: 38, 28: 84, 51: 67, 71: 91 } as Record<number, number>;
-const ludoRoute = Array.from({ length: 24 }, (_, index) => index);
-const dicePips: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+const ladders: Record<number, number> = { 2: 23, 8: 34, 20: 77, 32: 68, 41: 79, 74: 92 };
+const snakes: Record<number, number> = { 99: 9, 95: 75, 88: 24, 62: 19, 48: 26, 36: 6 };
+const pips: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-function routeCell(index: number) {
-  if (index <= 6) return { row: 1, column: index + 1 };
-  if (index <= 11) return { row: index - 5, column: 7 };
-  if (index <= 18) return { row: 7, column: 19 - index };
-  return { row: 25 - index, column: 1 };
+function squarePosition(square: number) {
+  const offset = square - 1;
+  const rowFromBottom = Math.floor(offset / 10);
+  const columnOffset = offset % 10;
+  return { row: 10 - rowFromBottom, column: rowFromBottom % 2 === 0 ? columnOffset + 1 : 10 - columnOffset };
+}
+function pixel(square: number) {
+  const { row, column } = squarePosition(square);
+  return { x: (column - 0.5) * 100, y: (row - 0.5) * 100 };
+}
+function sleep(ms: number) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
+
+function Ladder({ from, to }: { from: number; to: number }) {
+  const start = pixel(from); const end = pixel(to); const dx = end.x - start.x; const dy = end.y - start.y; const length = Math.hypot(dx, dy); const normal = { x: (-dy / length) * 12, y: (dx / length) * 12 };
+  return <g className="ladder-art"><line x1={start.x + normal.x} y1={start.y + normal.y} x2={end.x + normal.x} y2={end.y + normal.y} /><line x1={start.x - normal.x} y1={start.y - normal.y} x2={end.x - normal.x} y2={end.y - normal.y} />{Array.from({ length: 5 }, (_, index) => { const t = (index + 1) / 6; const x = start.x + dx * t; const y = start.y + dy * t; return <line key={index} x1={x + normal.x} y1={y + normal.y} x2={x - normal.x} y2={y - normal.y} />; })}</g>;
+}
+function Snake({ from, to }: { from: number; to: number }) {
+  const start = pixel(from); const end = pixel(to); const midX = (start.x + end.x) / 2; const midY = (start.y + end.y) / 2;
+  return <g className="snake-art"><path d={`M ${start.x} ${start.y} Q ${midX + 90} ${midY - 70} ${end.x} ${end.y}`} /><circle cx={start.x} cy={start.y} r="20" /></g>;
 }
 
-function ClassicLudoBoard({ you, bot }: { you: number | null; bot: number | null }) {
-  const youCell = you === null ? null : routeCell(you);
-  const botCell = bot === null ? null : routeCell((bot + 12) % ludoRoute.length);
-  return <div className="classic-ludo-board" aria-label="صفحهٔ منچ کلاسیک">
-    {ludoRoute.map((cell) => { const point = routeCell(cell); return <i key={cell} className={`classic-ludo-cell ${cell === 0 ? "is-start-you" : cell === 12 ? "is-start-bot" : ""}`} style={{ gridRow: point.row, gridColumn: point.column }} />; })}
-    <div className="classic-ludo-home your-home"><span>شما</span></div><div className="classic-ludo-home bot-home"><span>ربات</span></div><div className="classic-ludo-finish"><Crown size={20} /></div>
-    {youCell && <span className="classic-token you-token" style={{ gridRow: youCell.row, gridColumn: youCell.column }}>آ</span>}
-    {botCell && <span className="classic-token bot-token" style={{ gridRow: botCell.row, gridColumn: botCell.column }}>ر</span>}
-    {!youCell && <span className="classic-token you-token home-token">آ</span>}{!botCell && <span className="classic-token bot-token bot-home-token">ر</span>}
-  </div>;
-}
-
-function SnakesBoard({ you, bot }: { you: number; bot: number }) {
-  return <div className="snakes-board" aria-label="صفحهٔ مار و پله">
-    {Array.from({ length: 100 }, (_, index) => { const number = 100 - index; const special = ladders[number] ? "ladder" : snakes[number] ? "snake" : ""; return <div className={`snake-cell ${special}`} key={number}><span>{number}</span>{ladders[number] && <b>↗</b>}{snakes[number] && <b>↘</b>}{you === number && <i className="snake-token you-token">آ</i>}{bot === number && <i className="snake-token bot-token">ر</i>}</div>; })}
+function SnakeBoard({ positions, moving, jump }: { positions: Positions; moving: Player | null; jump: "ladder" | "snake" | null }) {
+  const you = squarePosition(Math.max(positions.you, 1)); const bot = squarePosition(Math.max(positions.bot, 1));
+  return <div className={`snake-board-stage ${jump ? `is-${jump}` : ""}`}>
+    <div className="snake-board" aria-label="صفحهٔ مار و پله">
+      {Array.from({ length: 100 }, (_, index) => { const square = index + 1; const position = squarePosition(square); return <div key={square} className={`snake-cell ${ladders[square] ? "is-ladder" : ""} ${snakes[square] ? "is-snake" : ""}`} style={{ gridRow: position.row, gridColumn: position.column }}><span>{square}</span></div>; })}
+      <svg className="board-art" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">{Object.entries(ladders).map(([from, to]) => <Ladder key={from} from={Number(from)} to={to} />)}{Object.entries(snakes).map(([from, to]) => <Snake key={from} from={Number(from)} to={to} />)}</svg>
+      <span className={`snake-piece you-piece ${moving === "you" ? "is-moving" : ""}`} style={{ gridRow: you.row, gridColumn: you.column } as CSSProperties}>آ</span>
+      <span className={`snake-piece bot-piece ${moving === "bot" ? "is-moving" : ""}`} style={{ gridRow: bot.row, gridColumn: bot.column } as CSSProperties}>ر</span>
+      <div className="finish-crown"><Crown size={15} /><small>100</small></div>
+    </div>
+    <div className="board-compass"><i /> خانهٔ تو <span>—</span> خانهٔ ربات <i className="bot" /></div>
   </div>;
 }
 
 export function ClassicGames() {
-  const [kind, setKind] = useState<GameKind>("ludo");
-  const [mode, setMode] = useState<PlayMode>("lobby");
-  const [turn, setTurn] = useState<Turn>("you");
+  const [mode, setMode] = useState<Mode>("lobby");
+  const [positions, setPositions] = useState<Positions>({ you: 0, bot: 0 });
+  const [turn, setTurn] = useState<Player>("you");
   const [dice, setDice] = useState(1);
   const [rolling, setRolling] = useState(false);
-  const [ludoPositions, setLudoPositions] = useState<{ you: number | null; bot: number | null }>({ you: null, bot: null });
-  const [snakePositions, setSnakePositions] = useState({ you: 0, bot: 0 });
+  const [moving, setMoving] = useState<Player | null>(null);
+  const [jump, setJump] = useState<"ladder" | "snake" | null>(null);
+  const [winner, setWinner] = useState<Player | null>(null);
+  const [soundOn, setSoundOn] = useState(true);
   const [roomCode, setRoomCode] = useState("");
   const [onlineRoom, setOnlineRoom] = useState("");
-  const [onlineState, setOnlineState] = useState<OnlineRoomState | null>(null);
+  const [onlineState, setOnlineState] = useState<OnlineState | null>(null);
   const [onlineStatus, setOnlineStatus] = useState<"idle" | "connecting" | "waiting" | "ready" | "error">("idle");
-  const [playerId] = useState(() => `player-${Math.random().toString(36).slice(2, 10)}`);
+  const [playerId] = useState(() => `snake-${Math.random().toString(36).slice(2, 10)}`);
   const socketRef = useRef<WebSocket | null>(null);
   const isOnline = mode === "online-play";
 
   useEffect(() => () => socketRef.current?.close(), []);
-
-  const resetGame = () => {
-    setTurn("you"); setDice(1); setLudoPositions({ you: null, bot: null }); setSnakePositions({ you: 0, bot: 0 });
+  const reset = () => { setPositions({ you: 0, bot: 0 }); setTurn("you"); setDice(1); setWinner(null); setJump(null); setMoving(null); };
+  const specialMove = async (player: Player, landed: number) => {
+    const type = ladders[landed] ? "ladder" : snakes[landed] ? "snake" : null;
+    if (!type) return landed;
+    setJump(type); playGameSound(type, soundOn); toast(type === "ladder" ? "پله پیدا کردی!" : "مار به دام انداخت!", { description: type === "ladder" ? `از ${landed} به ${ladders[landed]} صعود کردی.` : `از ${landed} به ${snakes[landed]} برگشتی.` });
+    await sleep(520); const destination = type === "ladder" ? ladders[landed] : snakes[landed]; setPositions((current) => ({ ...current, [player]: destination })); await sleep(280); setJump(null); return destination;
   };
-  const moveSnakes = (who: Turn, value: number) => {
-    setSnakePositions((previous) => {
-      const current = previous[who]; const raw = current + value;
-      if (raw > 100) return previous;
-      const target = ladders[raw] ?? snakes[raw] ?? raw;
-      if (target !== raw) toast(ladders[raw] ? "پله!" : "مار!", { description: ladders[raw] ? `به خانهٔ ${target} رفتی.` : `به خانهٔ ${target} برگشتی.` });
-      if (target === 100) toast(who === "you" ? "بردی!" : "ربات برنده شد", { description: "برای یک راند تازه، بازی را دوباره شروع کن." });
-      return { ...previous, [who]: target };
-    });
+  const movePiece = async (player: Player, value: number) => {
+    const current = positions[player];
+    if (current + value > 100) { playGameSound("blocked", soundOn); toast("برای رسیدن به ۱۰۰ باید تاس دقیق بیاوری"); return false; }
+    setMoving(player);
+    for (let next = current + 1; next <= current + value; next += 1) { setPositions((state) => ({ ...state, [player]: next })); playGameSound("step", soundOn); await sleep(130); }
+    const finalSquare = await specialMove(player, current + value);
+    setMoving(null);
+    if (finalSquare === 100) { setWinner(player); playGameSound("win", soundOn); toast(player === "you" ? "بردی!" : "ربات برنده شد", { description: player === "you" ? "به خانهٔ ۱۰۰ رسیدی." : "یک راند دیگر امتحان کن." }); return true; }
+    return false;
   };
-  const moveLudo = (who: Turn, value: number) => {
-    setLudoPositions((previous) => {
-      const current = previous[who];
-      if (current === null && value !== 6) { toast(who === "you" ? "برای ورود باید ۶ بیاوری" : "ربات هم منتظر ۶ است"); return previous; }
-      const target = current === null ? 0 : current + value;
-      if (target >= ludoRoute.length) { toast(who === "you" ? "تو برنده شدی!" : "ربات برنده شد", { description: "مسیر را کامل کرد." }); return { ...previous, [who]: ludoRoute.length - 1 }; }
-      return { ...previous, [who]: target };
-    });
+  const botTurn = async () => { setTurn("bot"); await sleep(650); const value = Math.floor(Math.random() * 6) + 1; setDice(value); playGameSound("roll", soundOn); await sleep(350); const won = await movePiece("bot", value); if (!won) setTurn("you"); };
+  const practiceRoll = async () => {
+    if (rolling || turn !== "you" || winner) return;
+    setRolling(true); for (let frame = 0; frame < 8; frame += 1) { setDice(Math.floor(Math.random() * 6) + 1); playGameSound("roll", soundOn); await sleep(72); }
+    const value = Math.floor(Math.random() * 6) + 1; setDice(value); setRolling(false); const won = await movePiece("you", value); if (!won) void botTurn();
   };
-  const botTurn = () => {
-    setTurn("bot");
-    window.setTimeout(() => {
-      const value = Math.floor(Math.random() * 6) + 1; setDice(value);
-      if (kind === "ludo") moveLudo("bot", value); else moveSnakes("bot", value);
-      window.setTimeout(() => setTurn("you"), 700);
-    }, 800);
-  };
-  const roll = () => {
-    if (rolling || turn !== "you") return;
-    if (isOnline) {
-      if (socketRef.current?.readyState !== WebSocket.OPEN) return toast("اتصال آنلاین آماده نیست");
-      setRolling(true);
-      socketRef.current.send(JSON.stringify({ action: "roll" }));
-      return;
-    }
-    setRolling(true); let frames = 0;
-    const reel = window.setInterval(() => { setDice(Math.floor(Math.random() * 6) + 1); frames += 1; if (frames === 8) { window.clearInterval(reel); const value = Math.floor(Math.random() * 6) + 1; setDice(value); setRolling(false); if (kind === "ludo") moveLudo("you", value); else moveSnakes("you", value); botTurn(); } }, 75);
-  };
-  const enterPractice = (next: GameKind) => { setKind(next); setMode("practice"); resetGame(); };
-  const applyOnlineState = (nextState: OnlineRoomState) => {
-    setOnlineState(nextState);
-    setOnlineStatus(nextState.status === "active" ? "ready" : "waiting");
-    setTurn(nextState.state.active_player === playerId ? "you" : "bot");
-    const positions = nextState.state.positions ?? {};
-    const opponent = Object.entries(positions).find(([id]) => id !== playerId)?.[1] ?? 0;
-    if (kind === "snakes") setSnakePositions({ you: positions[playerId] ?? 0, bot: opponent });
-    else setLudoPositions({ you: positions[playerId] ?? null, bot: opponent || null });
-  };
+  const applyRoomState = (state: OnlineState) => { setOnlineState(state); setOnlineStatus(state.status === "active" ? "ready" : "waiting"); setTurn(state.state.active_player === playerId ? "you" : "bot"); const values = state.state.positions ?? {}; const opponent = Object.entries(values).find(([id]) => id !== playerId)?.[1] ?? 0; setPositions({ you: values[playerId] ?? 0, bot: opponent }); };
   const connectRoom = (code: string) => {
     const base = (import.meta.env.VITE_DJANGO_WS_URL ?? "").replace(/\/$/, "");
-    if (!base) { setOnlineStatus("error"); return toast("سرور آنلاین تنظیم نشده", { description: "برای بازی واقعی، VITE_DJANGO_WS_URL را روی آدرس سرویس Django تنظیم کن." }); }
-    socketRef.current?.close(); setOnlineStatus("connecting"); setOnlineRoom(code);
-    const socket = new WebSocket(`${base}/ws/rooms/${code}/`); socketRef.current = socket;
-    socket.onopen = () => socket.send(JSON.stringify({ action: "join", player_id: playerId, nickname: "آرین", game_type: kind }));
-    socket.onerror = () => { setOnlineStatus("error"); toast("اتصال اتاق برقرار نشد", { description: "آدرس سرور و اتصال اینترنت را بررسی کن." }); };
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === "joined" && !message.ok) toast(message.message);
-      if (message.type === "room_state") applyOnlineState(message);
-      if (message.type === "roll") {
-        setRolling(false);
-        if (!message.ok) return toast(message.message);
-        setDice(message.dice_value);
-        window.setTimeout(() => {
-          const fromStep = kind === "snakes" ? snakePositions.you : ludoPositions.you ?? 0;
-          socket.send(JSON.stringify({ action: "move", token_id: playerId, from_step: fromStep, to_step: fromStep + message.dice_value }));
-        }, 330);
-      }
-      if (message.type === "error") toast(message.message);
-    };
+    if (!base) { setOnlineStatus("error"); return toast("سرور آنلاین تنظیم نشده", { description: "برای بازی واقعی، VITE_DJANGO_WS_URL را تنظیم کن." }); }
+    socketRef.current?.close(); setOnlineRoom(code); setOnlineStatus("connecting"); const socket = new WebSocket(`${base}/ws/rooms/${code}/`); socketRef.current = socket;
+    socket.onopen = () => socket.send(JSON.stringify({ action: "join", player_id: playerId, nickname: "آرین", game_type: "snakes" }));
+    socket.onerror = () => { setOnlineStatus("error"); toast("اتصال آنلاین برقرار نشد"); };
+    socket.onmessage = (event) => { const message = JSON.parse(event.data); if (message.type === "room_state") applyRoomState(message); if (message.type === "roll") { setRolling(false); if (message.ok) { setDice(message.dice_value); socket.send(JSON.stringify({ action: "move", token_id: playerId })); } else toast(message.message); } if (message.type === "move" && message.ok) { if (message.event === "ladder") toast("پله پیدا کردی!"); if (message.event === "snake") toast("مار به دام انداخت!"); if (message.event === "blocked") toast("برای ۱۰۰ باید تاس دقیق بیاوری"); if (message.winner) toast("بازیکن برنده شد!"); } if (message.type === "error") toast(message.message); };
   };
-  const createRoom = () => { const code = roomCode.trim().toUpperCase() || `PLAY-${Math.random().toString(36).slice(2, 6).toUpperCase()}`; connectRoom(code); };
+  const onlineRoll = () => { if (socketRef.current?.readyState !== WebSocket.OPEN) return toast("اتصال هنوز آماده نیست"); setRolling(true); socketRef.current.send(JSON.stringify({ action: "roll" })); };
+  const enterRoom = () => { const code = roomCode.trim().toUpperCase() || `SNAKE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`; connectRoom(code); };
 
-  if (mode === "lobby") return <section className="classic-lobby">
-    <div className="classic-control-surface"><div className="classic-brand-row"><BrandMark /><span><i /> CLASSIC MATCHROOM</span></div><div className="classic-intro"><span className="classic-live"><i /> میزها بازند</span><h2>میزت را انتخاب کن.</h2><p>قواعد آشنا، نوبت کوتاه، شروع بی‌وقفه.</p></div><div className="classic-control-rail"><span>MODE // 02</span><i /><b>بازی کلاسیک</b><em>یک تصمیم تا شروع</em></div></div>
-    <article className="classic-choice ludo-choice"><div><span className="choice-label">CLASSIC LUDO</span><h3>منچ معمولی</h3><p>با تاس ۶ وارد مسیر شو؛ زودتر به پایان برس.</p><span className="choice-hud"><i /> ۲ بازیکن · میز سریع</span></div><button className="primary-button" onClick={() => enterPractice("ludo")}><Bot size={16} /> شروع تمرین</button></article>
-    <article className="classic-choice snakes-choice"><div><span className="choice-label">SNAKES & LADDERS</span><h3>مار و پله</h3><p>پله‌ها بالا می‌برند؛ از مارها جا نمان.</p><span className="choice-hud"><i /> مسیر ۱۰۰ خانه‌ای</span></div><button className="primary-button" onClick={() => enterPractice("snakes")}><Gamepad2 size={16} /> مسابقه را شروع کن</button></article>
-    <article className="online-entry"><div><span className="online-emblem"><Wifi size={18} /></span><div><b>بازی آنلاین با دوست</b><small>اتاق خصوصی بساز یا با کد وارد شو.</small></div></div><button className="surface-button" onClick={() => setMode("online")}>اتاق آنلاین <ChevronLeft size={15} /></button></article>
-    <div className="classic-rule"><CircleHelp size={16} /><p>برای منچ باید ۶ بیاوری تا مهره وارد مسیر شود. در مار و پله، هر نوبت فقط یک حرکت داری.</p></div>
-  </section>;
+  if (mode === "lobby") return <section className="snake-lobby"><div className="snake-hero"><div className="snake-brand"><BrandMark /><span><i /> SNAKES & LADDERS</span></div><div><small>شبِ بازی</small><h2>تا خانهٔ ۱۰۰ بالا برو.</h2><p>تاس بریز، از پله‌ها صعود کن و پیش از ربات به تاج برس.</p></div><div className="snake-match-ticker"><span><b>100</b> PATH</span><i /><span><b>02</b> PLAYERS</span><i /><span><b>04:00</b> QUICK</span></div><div className="snake-hero-rail"><span>ROUND // 01</span><i /><b>یک مسیر، یک برنده</b></div></div><article className="snake-primary-card"><span className="main-event-label"><i /> MAIN EVENT</span><div className="primary-art"><span>100</span><i>↗</i></div><div><small>تمرین تک‌نفره</small><h3>رویارویی با ربات</h3><p>قواعد کامل مار و پله، نوبت‌های سریع و افکت‌های بازی.</p><button className="primary-button" onClick={() => { reset(); setMode("practice"); }}><Bot size={17} /> شروع مسابقه</button></div></article><article className="snake-online-card"><span className="online-wave"><Wifi size={18} /></span><div><b>اتاق آنلاین</b><small>کد بساز، دوستت را دعوت کن، نوبتی بازی کنید.</small></div><span className="online-mode-code">ROOM // 02</span><button className="surface-button" onClick={() => setMode("online")}>اتاق <ChevronLeft size={15} /></button></article><div className="snake-rules-mini"><span>قانون دقیق</span><p>حرکت فقط تا ۱۰۰ مجاز است؛ پله صعود می‌دهد و سرِ مار بازیکن را پایین می‌آورد.</p></div></section>;
 
-  if (mode === "online") return <section className="online-room-page"><button className="back-link" onClick={() => setMode("lobby")}>بازگشت <ChevronLeft size={15} /></button><div className="classic-intro"><span className="classic-live"><i /> اتاق خصوصی</span><h2>دوستت را دعوت کن.</h2><p>کد اتاق را بساز یا کدی را که دریافت کرده‌ای وارد کن.</p></div><div className="game-kind-switch"><button className={kind === "ludo" ? "is-active" : ""} onClick={() => setKind("ludo")}>منچ</button><button className={kind === "snakes" ? "is-active" : ""} onClick={() => setKind("snakes")}>مار و پله</button></div><label className="room-input"><span>کد اتاق</span><input value={roomCode} onChange={(event) => setRoomCode(event.target.value)} placeholder="مثلاً PLAY-A7K2" /></label><button className="primary-button room-submit" onClick={createRoom}><UsersRound size={17} /> ساخت یا ورود به اتاق</button>{onlineRoom && <div className={`room-ready ${onlineStatus === "ready" ? "is-ready" : ""}`}><span><Wifi size={17} /></span><div><b>اتاق {onlineRoom} {onlineStatus === "ready" ? "آمادهٔ بازی است" : "ثبت شد"}</b><small>{onlineStatus === "connecting" ? "در حال اتصال به میزبان…" : onlineStatus === "ready" ? "یک بازیکن دیگر متصل شد." : "منتظر ورود یک بازیکن دیگر هستیم."}</small></div></div>}{onlineStatus === "ready" && <button className="primary-button room-submit" onClick={() => { resetGame(); setMode("online-play"); }}>شروع بازی آنلاین</button>}<div className="online-note"><Trophy size={16} /> برای مسابقهٔ واقعی، هر دو بازیکن باید به همین کد اتاق وارد شوند.</div></section>;
+  if (mode === "online") return <section className="snake-online-page"><button className="back-link" onClick={() => setMode("lobby")}>بازی‌ها <ChevronLeft size={15} /></button><div className="snake-page-title"><small>اتاق خصوصی</small><h2>دوستت را وارد بازی کن.</h2><p>یک کد کوتاه بساز یا کد دریافت‌شده را وارد کن.</p></div><label className="snake-room-input"><span>کد اتاق</span><input value={roomCode} onChange={(event) => setRoomCode(event.target.value)} placeholder="مثلاً SNAKE-7P2A" /></label><button className="primary-button snake-room-submit" onClick={enterRoom}><UsersRound size={17} /> ساخت یا ورود به اتاق</button>{onlineRoom && <div className={`snake-room-state ${onlineStatus === "ready" ? "is-ready" : ""}`}><Wifi size={18} /><div><b>{onlineStatus === "ready" ? "حریف متصل شد" : "اتاق ثبت شد"}</b><small>{onlineStatus === "connecting" ? "در حال اتصال…" : onlineStatus === "ready" ? "میز آمادهٔ شروع است." : `کد ${onlineRoom} را ارسال کن.`}</small></div></div>}{onlineStatus === "ready" && <button className="primary-button snake-room-submit" onClick={() => { reset(); setMode("online-play"); }}>شروع بازی آنلاین</button>}</section>;
 
-  const title = kind === "ludo" ? "منچ معمولی" : "مار و پله";
-  return <section className="classic-play"><div className="classic-play-top"><button className="back-link" onClick={() => setMode(isOnline ? "online" : "lobby")}>بازی‌ها <ChevronLeft size={15} /></button><span className="practice-badge">{isOnline ? <><Wifi size={13} /> اتاق {onlineRoom}</> : <><Bot size={13} /> تمرین با ربات</>}</span></div><header className="classic-match-head"><span>{turn === "you" ? "نوبت تو" : isOnline ? "نوبت حریف" : "نوبت ربات"}</span><h2>{title}</h2><small>{kind === "ludo" ? "با ۶ وارد مسیر شو" : "به خانهٔ ۱۰۰ برس"}</small></header>{kind === "ludo" ? <ClassicLudoBoard you={ludoPositions.you} bot={ludoPositions.bot} /> : <SnakesBoard you={snakePositions.you} bot={snakePositions.bot} />}<div className="classic-score"><span><b>{kind === "ludo" ? ludoPositions.you === null ? 0 : ludoPositions.you + 1 : snakePositions.you}</b> شما</span><i /><span><b>{kind === "ludo" ? ludoPositions.bot === null ? 0 : ludoPositions.bot + 1 : snakePositions.bot}</b> {isOnline ? onlineState?.players.find((player) => player.id !== playerId)?.nickname ?? "حریف" : "ربات"}</span></div><div className="classic-dice-zone"><div className={`classic-dice ${rolling ? "is-rolling" : ""}`}>{Array.from({ length: 9 }, (_, index) => <i key={index} className={dicePips[dice].includes(index) ? "" : "blank"} />)}</div><button className="primary-button classic-roll" disabled={rolling || turn !== "you"} onClick={roll}><Dices size={18} /> {rolling ? "در حال چرخش" : turn === "bot" ? isOnline ? "نوبت حریف" : "ربات در حال بازی" : "تاس بریز"}</button><button className="surface-button" onClick={resetGame}><RotateCcw size={15} /> شروع دوباره</button></div></section>;
+  return <section className="snake-match"><div className="snake-match-top"><button className="back-link" onClick={() => setMode(isOnline ? "online" : "lobby")}>خروج <ChevronLeft size={15} /></button><button className={`sound-toggle ${soundOn ? "is-on" : ""}`} onClick={() => setSoundOn((enabled) => !enabled)}>{soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} {soundOn ? "صدا روشن" : "بی‌صدا"}</button></div><header className="snake-status"><span className={turn === "you" ? "is-active" : ""}>{turn === "you" ? "نوبت توست" : isOnline ? "نوبت حریف" : "ربات در حال حرکت"}</span><h2>مار و پله</h2><small>{winner ? (winner === "you" ? "تاج برای توست" : "تاج به ربات رسید") : "برای رسیدن به ۱۰۰، تاس دقیق بیاور."}</small></header><SnakeBoard positions={positions} moving={moving} jump={jump} /><div className="snake-score"><span><b>{positions.you}</b> خانهٔ تو</span><i /><span><b>{positions.bot}</b> {isOnline ? onlineState?.players.find((player) => player.id !== playerId)?.nickname ?? "حریف" : "ربات"}</span></div><div className="snake-dice-panel"><div className={`snake-dice ${rolling ? "is-rolling" : ""}`}>{Array.from({ length: 9 }, (_, index) => <i key={index} className={pips[dice].includes(index) ? "" : "blank"} />)}</div><div><button className="primary-button snake-roll" onClick={isOnline ? onlineRoll : practiceRoll} disabled={rolling || turn !== "you" || Boolean(winner)}><Dices size={18} /> {rolling ? "تاس در حال چرخش" : turn !== "you" ? "نوبت حریف" : "تاس بریز"}</button><button className="surface-button snake-reset" onClick={reset}><RotateCcw size={15} /> شروع دوباره</button></div></div></section>;
 }

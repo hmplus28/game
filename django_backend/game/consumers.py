@@ -5,6 +5,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from .models import GameMove, GameRoom, RoomPlayer
+from .rules import advance
 
 
 class RoomConsumer(AsyncJsonWebsocketConsumer):
@@ -26,7 +27,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         if action == "join":
             self.player_id = str(content.get("player_id", ""))[:48]
             nickname = str(content.get("nickname", "بازیکن"))[:32]
-            game_type = content.get("game_type", GameRoom.GameType.LUDO)
+            game_type = content.get("game_type", GameRoom.GameType.SNAKES)
             if not self.player_id or game_type not in GameRoom.GameType.values:
                 return await self.send_json({"type": "error", "message": "مشخصات ورود معتبر نیست."})
             joined, message = await self._join_room(self.player_id, nickname, game_type)
@@ -100,18 +101,20 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         dice_value = room.state.get("last_dice")
         if room.status != GameRoom.Status.ACTIVE or room.state.get("active_player") != player_id or not dice_value:
             return {"type": "move", "ok": False, "message": "حرکت در این نوبت معتبر نیست."}
-        token_id = str(content.get("token_id", "piece"))[:24]
-        from_step = int(content.get("from_step", 0))
-        to_step = int(content.get("to_step", from_step + dice_value))
-        if from_step < 0 or to_step < 0:
-            return {"type": "move", "ok": False, "message": "مختصات حرکت معتبر نیست."}
+        token_id = str(content.get("token_id", player_id))[:24]
         positions = room.state.setdefault("positions", {})
-        positions[token_id] = to_step
+        from_step = int(positions.get(player_id, 0))
+        result = advance(from_step, dice_value)
+        to_step = result["to"]
+        positions[player_id] = to_step
         players = list(room.players.all().order_by("joined_at"))
         next_player = next((player for player in players if player.player_id != player_id), players[0] if players else None)
         room.state["last_dice"] = None
-        room.state["active_player"] = next_player.player_id if next_player else player_id
+        room.state["winner"] = player_id if result["winner"] else None
+        room.state["active_player"] = next_player.player_id if next_player and not result["winner"] else player_id
         room.turn_number += 1
-        room.save(update_fields=["state", "turn_number", "updated_at"])
+        if result["winner"]:
+            room.status = GameRoom.Status.FINISHED
+        room.save(update_fields=["state", "turn_number", "status", "updated_at"])
         GameMove.objects.create(room=room, player_id=player_id, token_id=token_id, dice_value=dice_value, from_step=from_step, to_step=to_step)
-        return {"type": "move", "ok": True, "next_player": room.state["active_player"]}
+        return {"type": "move", "ok": True, "from_step": from_step, "to_step": to_step, "event": result["event"], "winner": result["winner"], "next_player": room.state["active_player"]}
