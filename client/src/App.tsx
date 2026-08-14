@@ -5,14 +5,15 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import { Friends, Leaderboard, Leagues, Play, Profile, Promo, Rewards, Season, SettingsPage, Shop, Tournaments } from "./pages/Views";
+import ClassicGamesPage from "./pages/ClassicGamesPage";
+import { Friends, Leaderboard, Leagues, Profile, Promo, Rewards, Season, SettingsPage, Shop, Tournaments } from "./pages/Views";
 
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
-      <Route path={"/play"} component={Play} />
+      <Route path={"/play"} component={ClassicGamesPage} />
       <Route path={"/leagues"} component={Leagues} />
       <Route path={"/leaderboard"} component={Leaderboard} />
       <Route path={"/season"} component={Season} />
