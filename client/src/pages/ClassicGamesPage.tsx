@@ -3,5 +3,5 @@ import { AppShell } from "@/components/AppShell";
 import { ClassicGames } from "@/components/ClassicGames";
 
 export default function ClassicGamesPage() {
-  return <AppShell title="بازی‌های کلاسیک" eyebrow="ساده و خانوادگی"><ClassicGames /></AppShell>;
+  return <AppShell title="مار و پله" eyebrow="مسیر رقابت"><ClassicGames /></AppShell>;
 }
