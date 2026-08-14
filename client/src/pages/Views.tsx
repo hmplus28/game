@@ -4,15 +4,16 @@
  */
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Award, Check, CircleHelp, Crown, Gift, Medal, MessageCircle, PackageOpen, RotateCcw, Send, Shield, ShoppingBag, Sparkles, Trophy, Users, Volume2, Zap } from "lucide-react";
+import { Award, Check, CircleHelp, Crown, Gift, HelpCircle, Medal, MessageCircle, PackageOpen, RotateCcw, Send, Shield, ShoppingBag, Sparkles, Trophy, Users, Volume2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { LudoBoard } from "@/components/LudoBoard";
+import { GameTutorial } from "@/components/GameTutorial";
 import { recordDjangoMove, rollDjangoDice } from "@/lib/gameApi";
 
 const leagues = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Champion"];
-const players: [string, string, string, boolean][] = [
-  ["نیما.ک", "سطح 31", "ن", true], ["باران", "سطح 27", "ب", false], ["مهرداد", "سطح 29", "م", false], ["سارا.م", "سطح 24", "س", false],
+const players: [string, string, string][] = [
+  ["نیما.ک", "سطح 31", "ن"], ["باران", "سطح 27", "ب"], ["مهرداد", "سطح 29", "م"], ["سارا.م", "سطح 24", "س"],
 ];
 
 export function Play() {
@@ -20,10 +21,26 @@ export function Play() {
   const [rolling, setRolling] = useState(false);
   const [moveValue, setMoveValue] = useState(0);
   const [message, setMessage] = useState("");
+  const [turnIndex, setTurnIndex] = useState(0);
+  const [phase, setPhase] = useState<"roll" | "move" | "opponent">("roll");
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tokensInPlay, setTokensInPlay] = useState(0);
   const pipPositions: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+  const statusCopy = phase === "opponent" ? "حریف در حال انتخاب حرکت" : phase === "move" ? "مهرهٔ درخشان را لمس کن" : "برای شروع، تاس را پرتاب کن";
+
+  const finishTurn = (description: string) => {
+    setMoveValue(0);
+    setTurnIndex(1);
+    setPhase("opponent");
+    window.setTimeout(() => {
+      setTurnIndex(0);
+      setPhase("roll");
+      toast("نوبت شماست", { description });
+    }, 1350);
+  };
 
   const rollDice = () => {
-    if (rolling) return;
+    if (rolling || phase !== "roll") return;
     setRolling(true);
     setMoveValue(0);
     const djangoRoll = rollDjangoDice("ARENA-DEMO");
@@ -38,6 +55,7 @@ export function Play() {
           setRoll(finalValue);
           setRolling(false);
           setMoveValue(finalValue);
+          setPhase("move");
           toast(`تاس روی ${finalValue} ایستاد`, { description: "مهرهٔ طلایی را انتخاب کن تا حرکت آغاز شود." });
         });
       }
@@ -49,21 +67,24 @@ export function Play() {
   return (
     <AppShell title="میز مسابقه" eyebrow="بازی زنده">
       <section className="premium-panel game-room">
+        <div className="game-status-strip"><span><i className={phase === "opponent" ? "is-waiting" : ""} />{turnIndex === 0 ? "نوبت شما" : "نوبت حریف"}</span><b>{statusCopy}</b><button onClick={() => setTutorialOpen(true)}><HelpCircle size={15} /> آموزش</button></div>
+        <div className="game-score-strip"><span><b>۰</b> مهرهٔ رسیده</span><i /><span><b>{tokensInPlay}</b> مهرهٔ فعال</span><i /><span>راند ۱ از ۳</span></div>
         <aside className="player-stack">
-          {players.map(([name, level, initial, active]) => <div className={`player-tile ${active ? "is-turn" : ""}`} key={name}><span className="player-avatar">{initial}</span><span><b>{name}</b><small>{level} · Gold II</small></span>{active && <i className="turn-pulse" />}</div>)}
+          {players.map(([name, level, initial], index) => <div className={`player-tile ${turnIndex === index ? "is-turn" : ""}`} key={name}><span className="player-avatar">{initial}</span><span><b>{name}</b><small>{level} · Gold II</small></span>{turnIndex === index && <i className="turn-pulse" />}</div>)}
         </aside>
-        <div className="game-main"><LudoBoard moveValue={moveValue} onMoveComplete={(move) => { setMoveValue(0); void recordDjangoMove({ roomCode: "ARENA-DEMO", tokenId: "red-1", diceValue: move.steps, fromStep: move.fromStep, toStep: move.toStep }); toast("حرکت ثبت شد", { description: `${move.steps} خانه با موفقیت طی شد.` }); }} /></div>
+        <div className="game-main"><LudoBoard moveValue={phase === "move" ? moveValue : 0} onMoveComplete={(move) => { const rolledValue = moveValue; if (!move.entered) void recordDjangoMove({ roomCode: "ARENA-DEMO", tokenId: move.tokenId, diceValue: rolledValue, fromStep: move.fromStep, toStep: move.toStep }); if (move.entered) setTokensInPlay((count) => Math.min(4, count + 1)); toast(move.entered ? "مهره وارد مسیر شد" : "حرکت ثبت شد", { description: move.entered ? "با تاس ۶، یک مهرهٔ تازه به مسیر آمد." : `${move.steps} خانه با موفقیت طی شد.` }); finishTurn("حریف حرکتش را تمام کرد؛ دوباره تاس بریز."); }} /></div>
         <aside className="game-controls">
           <article className="premium-panel turn-card">
-            <span>{moveValue ? "حرکت در انتظار انتخاب مهره" : "نوبت شماست"}</span>
-            <h3>{moveValue ? `مهرهٔ طلایی را ${moveValue} خانه حرکت بده` : "یک حرکت هوشمندانه انتخاب کن"}</h3>
+            <span>{phase === "opponent" ? "نوبت حریف" : moveValue ? "حرکت در انتظار انتخاب مهره" : "نوبت شماست"}</span>
+            <h3>{phase === "opponent" ? "حرکت حریف در حال ثبت است" : moveValue ? `مهرهٔ طلایی را ${moveValue} خانه حرکت بده` : "یک حرکت هوشمندانه انتخاب کن"}</h3>
             <div className={`dice ${rolling ? "is-rolling" : ""} ${moveValue ? "has-result" : ""}`}>{pips}</div>
-            <button className="primary-button" onClick={rollDice} disabled={rolling || Boolean(moveValue)}><RotateCcw size={15} /> {rolling ? "در حال چرخش" : moveValue ? "مهره را انتخاب کن" : "پرتاب تاس"}</button>
-            <div className="game-utility"><button onClick={() => toast("تنظیمات بازی باز شد")}>تنظیمات</button><button onClick={() => toast("گزارش شما ثبت شد")}>گزارش مشکل</button></div>
+            <button className="primary-button" onClick={rollDice} disabled={rolling || phase !== "roll"}><RotateCcw size={15} /> {rolling ? "در حال چرخش" : phase === "opponent" ? "نوبت حریف" : moveValue ? "مهره را انتخاب کن" : "پرتاب تاس"}</button>
+            <div className="game-utility"><button onClick={() => phase === "move" ? finishTurn("حرکت مجاز نداشتی؛ دوباره تاس بریز.") : setTutorialOpen(true)}>{phase === "move" ? "رد نوبت" : "قوانین بازی"}</button><button onClick={() => phase === "move" ? setTutorialOpen(true) : toast("گزارش شما ثبت شد")}>{phase === "move" ? "راهنمای حرکت" : "گزارش مشکل"}</button></div>
           </article>
           <article className="premium-panel chat-card"><header><b>گفت‌وگوی میز</b><span><Volume2 size={11} /> بی‌صدا</span></header><div className="quick-chat">{["حرکت خوب بود!", "نوبت من؟", "موفق باشی"].map(q => <button key={q} onClick={() => toast(q, { description: "پیام سریع ارسال شد." })}>{q}</button>)}</div><form className="chat-compose" onSubmit={(e) => { e.preventDefault(); if (message.trim()) { toast(message, { description: "پیام ارسال شد." }); setMessage(""); } }}><input value={message} onChange={e => setMessage(e.target.value)} placeholder="پیام کوتاه..." /><button aria-label="ارسال"><Send size={14} /></button></form></article>
         </aside>
       </section>
+      <GameTutorial open={tutorialOpen} onOpenChange={setTutorialOpen} />
     </AppShell>
   );
 }

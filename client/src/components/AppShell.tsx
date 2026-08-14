@@ -1,6 +1,6 @@
 /**
- * Arena After Dark design reminder: a right-side command rail and floating dark
- * surfaces turn product navigation into a composed tournament control room.
+ * Mobile Arena design reminder: every screen is a one-handed, single-column
+ * game surface. Navigation is always thumb-reachable at the bottom.
  */
 import { Link, useLocation } from "wouter";
 import {
@@ -11,7 +11,6 @@ import {
   Home,
   LayoutGrid,
   Medal,
-  Settings,
   ShoppingBag,
   Swords,
   Trophy,
@@ -46,29 +45,6 @@ export function AppShell({ title, eyebrow, children }: { title: string; eyebrow:
 
   return (
     <div className="arena-app">
-      <aside className="command-rail">
-        <Link href="/" className="brand-link"><BrandMark /></Link>
-        <div className="rail-label">اتاق فرمان</div>
-        <nav className="side-nav" aria-label="ناوبری اصلی">
-          {navItems.map(({ href, label, icon: Icon, badge }) => (
-            <Link href={href} key={href} className={`nav-link ${location === href ? "is-active" : ""}`}>
-              <span className="nav-icon"><Icon size={18} strokeWidth={1.8} /></span>
-              <span>{label}</span>
-              {badge && <span className="live-dot">{badge}</span>}
-            </Link>
-          ))}
-        </nav>
-        <div className="rail-bottom">
-          <Link href="/profile" className={`profile-mini ${location === "/profile" ? "is-active" : ""}`}>
-            <span className="mini-avatar">آ</span>
-            <span><b>آرین.م</b><small>Gold II · سطح 28</small></span>
-          </Link>
-          <Link href="/settings" className={`settings-link ${location === "/settings" ? "is-active" : ""}`}>
-            <Settings size={18} /> تنظیمات
-          </Link>
-        </div>
-      </aside>
-
       <main className="main-stage">
         <header className="topbar">
           <div className="page-heading">
@@ -76,10 +52,7 @@ export function AppShell({ title, eyebrow, children }: { title: string; eyebrow:
             <h1>{title}</h1>
           </div>
           <div className="topbar-actions">
-            <div className="arena-broadcast-brand" aria-label="Ludo Arena live arena">
-              <img src="/manus-storage/ludo-arena-logo_577ea7f6.png" alt="" />
-              <span><small>LIVE ARENA</small><b dir="ltr">Ludo Arena</b></span>
-            </div>
+            <Link href="/" className="mobile-brand"><BrandMark /></Link>
             <button className="wallet-chip" onClick={() => toast("فروشگاه سکه در دسترس است", { description: "یک بسته را از فروشگاه انتخاب کنید." })}>
               <span className="coin">◒</span><b>8,240</b><small>سکه</small>
             </button>
