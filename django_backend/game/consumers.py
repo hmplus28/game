@@ -5,7 +5,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from .models import GameMove, GameRoom, RoomPlayer
-from .rules import advance
+from .rules import advance, resolve_capture
 
 
 class RoomConsumer(AsyncJsonWebsocketConsumer):
@@ -70,7 +70,7 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             player.is_connected = True
             player.save(update_fields=["nickname", "is_connected"])
         if not room.state:
-            room.state = {"active_player": player_id, "last_dice": None, "positions": {}, "winner": None}
+            room.state = {"active_player": player_id, "last_dice": None, "positions": {}, "winner": None, "last_capture": None}
         if room.players.count() >= 2:
             room.status = GameRoom.Status.ACTIVE
         room.save(update_fields=["state", "status", "updated_at"])
@@ -107,6 +107,9 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
         result = advance(from_step, dice_value)
         to_step = result["to"]
         positions[player_id] = to_step
+        capture = resolve_capture(positions, player_id, to_step)
+        room.state["positions"] = capture["positions"]
+        room.state["last_capture"] = {"by": player_id, "target": capture["captured"], "square": to_step, "turn": room.turn_number + 1} if capture["captured"] else None
         players = list(room.players.all().order_by("joined_at"))
         next_player = next((player for player in players if player.player_id != player_id), players[0] if players else None)
         room.state["last_dice"] = None
@@ -117,4 +120,4 @@ class RoomConsumer(AsyncJsonWebsocketConsumer):
             room.status = GameRoom.Status.FINISHED
         room.save(update_fields=["state", "turn_number", "status", "updated_at"])
         GameMove.objects.create(room=room, player_id=player_id, token_id=token_id, dice_value=dice_value, from_step=from_step, to_step=to_step)
-        return {"type": "move", "ok": True, "from_step": from_step, "to_step": to_step, "event": result["event"], "winner": result["winner"], "next_player": room.state["active_player"]}
+        return {"type": "move", "ok": True, "from_step": from_step, "to_step": to_step, "event": result["event"], "capture": room.state["last_capture"], "winner": result["winner"], "next_player": room.state["active_player"]}

@@ -1,5 +1,5 @@
 /** Lightweight Web Audio cues: zero external files, enabled only after user interaction. */
-export type GameSound = "roll" | "step" | "ladder" | "snake" | "win" | "blocked";
+export type GameSound = "roll" | "step" | "ladder" | "snake" | "win" | "blocked" | "capture";
 
 let audioContext: AudioContext | null = null;
 
@@ -31,4 +31,5 @@ export function playGameSound(sound: GameSound, enabled: boolean) {
   if (sound === "snake") { tone(330, 0.13, 0.045, 0, "sawtooth"); tone(215, 0.13, 0.04, 0.12, "sawtooth"); tone(125, 0.18, 0.035, 0.24, "sawtooth"); }
   if (sound === "win") { tone(523, 0.11, 0.06, 0); tone(659, 0.11, 0.06, 0.12); tone(784, 0.11, 0.06, 0.24); tone(1047, 0.25, 0.06, 0.36); }
   if (sound === "blocked") tone(125, 0.15, 0.04, 0, "triangle");
+  if (sound === "capture") { tone(180, 0.08, 0.07, 0, "square"); tone(110, 0.16, 0.06, 0.08, "sawtooth"); tone(285, 0.12, 0.05, 0.2, "square"); }
 }

@@ -17,3 +17,12 @@ def advance(position: int, dice_value: int) -> dict:
     if landing in SNAKES:
         return {"from": position, "to": SNAKES[landing], "landing": landing, "event": "snake", "winner": False}
     return {"from": position, "to": landing, "event": "move", "winner": landing == FINISH}
+
+
+def resolve_capture(positions: dict[str, int], attacker_id: str, landing: int) -> dict:
+    """Send a rival back to start when an attacker finishes on its non-start square."""
+    updated = {str(player_id): int(position) for player_id, position in positions.items()}
+    captured_id = next((player_id for player_id, position in updated.items() if player_id != attacker_id and landing > 0 and position == landing), None)
+    if captured_id:
+        updated[captured_id] = 0
+    return {"positions": updated, "captured": captured_id}
